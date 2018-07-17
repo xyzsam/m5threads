@@ -63,6 +63,8 @@
   #define DEBUG(args...) 
 #endif
 
+#define NO_WRITER (0)
+
 //Size and alignment requirements of "real" (NPTL/LinuxThreads) thread control block
 #define NPTL_TCB_SIZE 1184 // sizeof (struct pthread)
 #define NPTL_TCB_ALIGN sizeof(double)
@@ -259,7 +261,7 @@ int pthread_create (pthread_t* thread,
 }
 
 pthread_t pthread_self() {
-    if (__tcb == NULL) return 0; //main thread
+    if (__tcb == NULL) return 1; //main thread
     return __tcb->tid;
 }
 
@@ -379,7 +381,7 @@ int pthread_rwlock_init (pthread_rwlock_t* lock, const pthread_rwlockattr_t* att
   DEBUG("%s: start\n", __FUNCTION__);
     PTHREAD_RWLOCK_T_LOCK(lock) = 0; // used only with spin_lock, so we know to initilize to zero
     PTHREAD_RWLOCK_T_READERS(lock) = 0;
-    PTHREAD_RWLOCK_T_WRITER(lock) = -1; // -1 means no one owns the write lock
+    PTHREAD_RWLOCK_T_WRITER(lock) = NO_WRITER;
 
     return 0;
 }
@@ -396,13 +398,13 @@ int pthread_rwlock_rdlock (pthread_rwlock_t* lock) {
         // this is to reduce the contention and a possible live-lock to lock->access_lock
         while (1) {
             pthread_t writer = PTHREAD_RWLOCK_T_WRITER(lock);
-            if (writer == -1) {
+            if (writer == NO_WRITER) {
                 break;
             }
         }
 
         spin_lock((int*)&(PTHREAD_RWLOCK_T_LOCK(lock)));
-        if ((pthread_t)PTHREAD_RWLOCK_T_WRITER(lock) == -1) {
+        if ((pthread_t)PTHREAD_RWLOCK_T_WRITER(lock) == NO_WRITER) {
             PTHREAD_RWLOCK_T_READERS(lock)++;
             spin_unlock((int*)&(PTHREAD_RWLOCK_T_LOCK(lock)));
 	    PROFILE_LOCK_END(lock);
@@ -420,7 +422,7 @@ int pthread_rwlock_wrlock (pthread_rwlock_t* lock) {
     do {
         while (1) {
             pthread_t writer = PTHREAD_RWLOCK_T_WRITER(lock);
-            if (writer == -1) {
+            if (writer == NO_WRITER) {
                 break;
             }
             int num_readers = PTHREAD_RWLOCK_T_READERS(lock);
@@ -430,7 +432,7 @@ int pthread_rwlock_wrlock (pthread_rwlock_t* lock) {
         }
 
         spin_lock((int*)&(PTHREAD_RWLOCK_T_LOCK(lock)));
-        if ((pthread_t)PTHREAD_RWLOCK_T_WRITER(lock) == -1 && PTHREAD_RWLOCK_T_READERS(lock) == 0) {
+        if ((pthread_t)PTHREAD_RWLOCK_T_WRITER(lock) == NO_WRITER && PTHREAD_RWLOCK_T_READERS(lock) == 0) {
             PTHREAD_RWLOCK_T_WRITER(lock) = pthread_self();
             spin_unlock((int*)&(PTHREAD_RWLOCK_T_LOCK(lock)));
 	    PROFILE_LOCK_END(lock);
@@ -448,7 +450,7 @@ int pthread_rwlock_unlock (pthread_rwlock_t* lock) {
     spin_lock((int*)&(PTHREAD_RWLOCK_T_LOCK(lock)));
     if (pthread_self() == PTHREAD_RWLOCK_T_WRITER(lock)) {
         // the write lock will be released
-        PTHREAD_RWLOCK_T_WRITER(lock) = -1;
+        PTHREAD_RWLOCK_T_WRITER(lock) = NO_WRITER;
     } else {
         // one of the read locks will be released
         PTHREAD_RWLOCK_T_READERS(lock) = PTHREAD_RWLOCK_T_READERS(lock) - 1;
