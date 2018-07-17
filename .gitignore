@@ -1,0 +1,5 @@
+libpthread.a
+pthread.o
+tests/*.o
+tests/*_p
+tags

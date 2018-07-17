@@ -1,0 +1,10 @@
+test_stackgrow
+test_pthreadbasic
+test_pthread
+test_atomic
+test_barrier
+test_lock
+test_malloc
+test_sieve
+test___thread
+test_omp
